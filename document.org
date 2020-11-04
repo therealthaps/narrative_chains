@@ -1,0 +1,29 @@
+#+TITLE: Document
+
+
+* DONE Load Data
+CLOSED: [2020-11-04 Wed 14:55]
+ Load the data using pandas
+ ~load_data~
+    Loads in rocstories csv file and iterates over the stories
+    - Returns a generator of stories
+    - a generator is like a collection/list that isn't populated until a item is requested
+    - calling a ~next~ function on the generator gives an item if there is one left
+    - if there are no items left, returns that it is empty
+
+ #+BEGIN_src python
+for story in load_data("~/path/to/rocstories.csv"):
+    print(story)
+#+end_src
+
+* DONE Parse Data using Spacy
+CLOSED: [2020-11-04 Wed 14:55]
+- Want to load up spacy (or keep it loaded)
+- Want to pass each sentence into spacy
+  + store the parse as well.
+* TODO Extract Dependency Pairs
+* TODO Count Dependency pairs
+* TODO Protagonist detection
+- Heuristic 1: first mentioned protagonist
+- Heuristic 2: Most frequently mentioned protagonist
+- Heuristic 3: break ties in 2 with 1
