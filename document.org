@@ -27,3 +27,11 @@ CLOSED: [2020-11-04 Wed 14:55]
 - Heuristic 1: first mentioned protagonist
 - Heuristic 2: Most frequently mentioned protagonist
 - Heuristic 3: break ties in 2 with 1
+* TODO How to use Coreference
+- output looks like ~[(entity1, 2), (entity2, 1) ... ]~
+- Want to store and count ~[(story-id, entity, VERB, relation, index)]~
+- Want to find all instance where /lose/ and /find/ refer to the same entity?
+  + start of by counting all stories that have /lose/ and /find/
+    - find all story-ids where at least one verb is /lose/
+      + find all story-ids where at least one verb is /find/
+  + count how many times they refer to the same entity within the story

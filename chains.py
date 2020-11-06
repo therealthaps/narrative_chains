@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 import pandas as pd
+import neuralcoref
 import spacy
 import random
 from collections import namedtuple, Counter
 import tqdm
 
 nlp = spacy.load("en_core_web_lg")
+neuralcoref.add_to_pipe(nlp)
 
-ParsedStory = namedtuple("ParsedStory", "title story one two three four five".split())
+ParsedStory = namedtuple("ParsedStory", "id title story one two three four five".split())
 
 def load_data(rocstories):
     """Loads in rocstories csv file and iterates over the stories
@@ -26,7 +28,7 @@ def parse_story(story):
     # this is very compressed
     sentences = [nlp(sentence) for sentence in story[3:]]
     full_story = nlp(" ".join(story[3:]))
-    return ParsedStory(name, full_story, *sentences)
+    return ParsedStory(story.storyid, name, full_story, *sentences)
 
 def parse_story_verbose(story):
     """Same as parse_story but this is longer"""
@@ -77,16 +79,41 @@ def process_corpus(rocstories, sample=None, replacement=0.2):
 
 def process_story(parsedstory, heuristic=2, verbose=True):
     prot = protagonist(parsedstory, heuristic=2)
+    dep_pairs = extract_dependency_pairs(parsedstory)
+    # TODO: Next step: count dependency pairs
 
     if verbose:
         print("------------")
         print("Protagonist is: ", prot)
         print("story: ", parsedstory.title)
-        print(parsedstory.story.text)
+        for sentence in parsedstory[-5:]:
+            print(sentence)
+        for d in dep_pairs:
+            print("\t", d[1:])
         print("------------")
 
+def dereference_pair(token, story):
+    """returns a set id for an entity per story"""
+    if token.text.lower() in ["i", "me"]:
+        return -1
+    pool = story._.coref_clusters
+    for ref in pool:
+        for mention in ref.mentions:
+            if token == mention.root:
+                return ref.i
+    return None
+
 def extract_dependency_pairs(parse):
-    pass
+    """Get a story, return a list of dependency pairs"""
+    verbs = [verb for verb in parse.story if verb.pos_ == "VERB"]
+    deps = []
+    for verb in verbs:
+        for child in verb.children:
+            entity_index = dereference_pair(child, parse.story)
+            tup = (parse.id, verb, child.dep_, child, entity_index)
+            if entity_index != None:
+                deps.append(tup)
+    return deps
 
 
 # Protagonist detection
@@ -108,7 +135,6 @@ def protagonist_heuristic_one(story):
 # Heuristic 2: most frequently mentioned entity
 def protagonist_heuristic_two(story):
     #1 get entities
-    ents = [d.text for d in story.ents]
-    ctr = Counter(ents)
-    ents = sorted(ctr.most_common(), key=lambda x: -x[1])
-    return ents
+    if not story._.coref_clusters:
+        return None
+    return max(story._.coref_clusters, key=lambda cluster: len(cluster.mentions))
