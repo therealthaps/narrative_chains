@@ -4,11 +4,22 @@ import pandas as pd
 import neuralcoref
 import spacy
 import random
-from collections import namedtuple, Counter
+from collections import namedtuple, Counter, defaultdict
 import tqdm
+from pprint import pprint
 
+# Choose your model here
+# Recall that "en_core_web_sm" performed significantly worse with regards to coreference resolution
 nlp = spacy.load("en_core_web_lg")
 neuralcoref.add_to_pipe(nlp)
+
+
+# This is a magic number
+# When we are computing probabilitieis, we don't want anything to have occurred 0 times because some of our functions are undefined around 9
+# To avoid 0's, we can use something called Plus One Smoothing, which simply assumes that there is at least a minimum amount of everything
+# Obviously, this is not the most accurate thing, since there are almost certainly sentences that never have or will be said
+# But it is very useful for estimating probabilities
+PLUS_ONE_SMOOTHING = 0.01
 
 ParsedStory = namedtuple("ParsedStory", "id title story one two three four five".split())
 
@@ -30,23 +41,25 @@ def parse_story(story):
     full_story = nlp(" ".join(story[3:]))
     return ParsedStory(story.storyid, name, full_story, *sentences)
 
-def parse_story_verbose(story):
-    """Same as parse_story but this is longer"""
-    name = story.storytitle
-    # sentences = [nlp(sentence) for sentence in story[3:]]
-    just_story = story[3:]
-    sentences = []
-    for sentence in just_story:
-        sentences.append(nlp(sentence))
-    # sentences is a list
-    full_story = nlp(" ".join(story[3:]))
-    return ParsedStory(name, full_story, sentences[0], sentences[1], sentences[2], sentences[3], sentences[4])
+# I've commented out this function to avoid confusion
+# This was just a demonstration
+#def parse_story_verbose(story):
+#    """Same as parse_story but this is longer"""
+#    name = story.storytitle
+#    # sentences = [nlp(sentence) for sentence in story[3:]]
+#    just_story = story[3:]
+#    sentences = []
+#    for sentence in just_story:
+#        sentences.append(nlp(sentence))
+#    # sentences is a list
+#    full_story = nlp(" ".join(story[3:]))
+#    return ParsedStory(name, full_story, sentences[0], sentences[1], sentences[2], sentences[3], sentences[4])
 
 
 def take_sample(gen, sample=None, replacement=0.2):
     if not sample:
         """If we don't have a sample specified, return the entire generator"""
-        return gen
+        return tqdm.tqdm(gen)
     # take the first ~sample~ number of stories
     # randomly replace stories as we iterate
     sentences = []
@@ -71,16 +84,18 @@ def process_corpus(rocstories, sample=None, replacement=0.2):
     #   3: parse everything
     data = load_data(rocstories)
     dataset = [parse_story(story) for story in take_sample(data, sample, replacement)]
+    story_counter = ddict(list)
 
     for story in dataset:
-        process_story(story)
+        process_story(story, story_counter=story_counter)
 
-    return dataset
+    return dataset, ProbabilityTable(story_counter)
 
-def process_story(parsedstory, heuristic=2, verbose=True):
+def process_story(parsedstory, heuristic=2, verbose=True, story_counter=ddict(list)):
     prot = protagonist(parsedstory, heuristic=2)
-    dep_pairs = extract_dependency_pairs(parsedstory)
-    # TODO: Next step: count dependency pairs
+    parse_id, dep_pairs = extract_dependency_pairs(parsedstory)
+
+    story_counter[parse_id] = dep_pairs
 
     if verbose:
         print("------------")
@@ -88,10 +103,12 @@ def process_story(parsedstory, heuristic=2, verbose=True):
         print("story: ", parsedstory.title)
         for sentence in parsedstory[-5:]:
             print(sentence)
-        for d in dep_pairs:
-            print("\t", d[1:])
+        for entity in dep_pairs:
+            for d in dep_pairs[entity]:
+                print("\t", d)
         print("------------")
 
+# Return a per-story entity-id for a token
 def dereference_pair(token, story):
     """returns a set id for an entity per story"""
     if token.text.lower() in ["i", "me"]:
@@ -103,18 +120,19 @@ def dereference_pair(token, story):
                 return ref.i
     return None
 
+#Return a list of dependency pairs
 def extract_dependency_pairs(parse):
     """Get a story, return a list of dependency pairs"""
     verbs = [verb for verb in parse.story if verb.pos_ == "VERB"]
-    deps = []
+    deps = ddict(list)
     for verb in verbs:
         for child in verb.children:
             entity_index = dereference_pair(child, parse.story)
-            tup = (parse.id, verb, child.dep_, child, entity_index)
+            tup = (verb.text, child.dep_)
+            # Add the word/dependency pair to the identified entity
             if entity_index != None:
-                deps.append(tup)
-    return deps
-
+                deps[entity_index].append(tup)
+    return parse.id, deps
 
 # Protagonist detection
 def protagonist(story, heuristic=2):
@@ -125,7 +143,6 @@ def protagonist(story, heuristic=2):
         return protagonist_heuristic_two(story)
     elif heuristic == 3:
         raise NotImplementedError
-
 
 # Heuristic 1: first entity
 def protagonist_heuristic_one(story):
@@ -138,3 +155,47 @@ def protagonist_heuristic_two(story):
     if not story._.coref_clusters:
         return None
     return max(story._.coref_clusters, key=lambda cluster: len(cluster.mentions))
+
+class ProbabilityTable:
+    def __init__(self, counter):
+        self.counter = counter
+
+    def bigram(self, verb, dependency, verb2, dependency2):
+        """Find all the stories where story contains verb,dependency and verb2,dependency2
+        AND they refer to the same entity
+        """
+        ctr = 0
+        for story in self.counter:
+            for entity in self.counter[story]:
+                v = self.counter[story][entity]
+                if (verb, dependency) in v and (verb2, dependency2) in v:
+                    ctr +=1
+        return ctr
+
+    def unigram(self, verb, dependency):
+        """Number of stories containing verb/dependency"""
+        ctr = 0
+        for story in self.counter:
+            for entity in self.counter[story]:
+                if (verb, dependency) in self.counter[story][entity]:
+                    ctr += 1
+        return ctr
+
+    def pmi(self, verb, dependency, verb2, dependency2):
+        n = len(self.counter) + PLUS_ONE_SMOOTHING
+        prob_a_and_b = bigram(self.counter, verb, dependency, verb2, dependency2)+PLUS_ONE_SMOOTHING/n
+        prob_a = unigram(self.counter, verb, dependency)+PLUS_ONE_SMOOTHING/n
+        prob_b = unigram(self.counter, verb2, dependency2)+PLUS_ONE_SMOOTHING/n
+        return math.log(prob_a_and_b/(prob_a*prob_b))
+        #math.log(prob_a_and_b) - (math.log(prob_a) + math.log(prob_b))
+
+    def histo(self, verb, dependency):
+        """Return cooccurrence counts for all verb/dependency pairs for a given verb/dependency"""
+        ctr = Counter()
+        for story in self.counter:
+            for entity in self.counter[story]:
+                if (verb, dependency) in self.counter[story][entity]:
+                    for c in self.counter[story][entity]:
+                        if c != (verb, dependency):
+                            ctr += c
+        return ctr
