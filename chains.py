@@ -3,8 +3,8 @@
 import pandas as pd
 import neuralcoref
 import spacy
-import random
-from collections import namedtuple, Counter, defaultdict
+import random, math
+from collections import namedtuple, Counter, defaultdict as ddict
 import tqdm
 from pprint import pprint
 
@@ -128,11 +128,21 @@ def extract_dependency_pairs(parse):
     for verb in verbs:
         for child in verb.children:
             entity_index = dereference_pair(child, parse.story)
-            tup = (verb.text, child.dep_)
             # Add the word/dependency pair to the identified entity
+            tup = (verb.lemma_, child.dep_)
             if entity_index != None:
                 deps[entity_index].append(tup)
     return parse.id, deps
+
+def coreferring_pairs(parse, token):
+    """Because I'm nice, here's a function that gets all the dependency pairs that corefer to the given token
+    This is inefficiently based on extract_dependency_pairs and dereference_pair for a reason.
+    """
+    extracted = extract_dependency_pairs(parse)
+    res = dereference_pair(token, parse.story)
+    if res is None:
+        return []
+    return extracted[res]
 
 # Protagonist detection
 def protagonist(story, heuristic=2):
@@ -183,9 +193,9 @@ class ProbabilityTable:
 
     def pmi(self, verb, dependency, verb2, dependency2):
         n = len(self.counter) + PLUS_ONE_SMOOTHING
-        prob_a_and_b = bigram(self.counter, verb, dependency, verb2, dependency2)+PLUS_ONE_SMOOTHING/n
-        prob_a = unigram(self.counter, verb, dependency)+PLUS_ONE_SMOOTHING/n
-        prob_b = unigram(self.counter, verb2, dependency2)+PLUS_ONE_SMOOTHING/n
+        prob_a_and_b = self.bigram(verb, dependency, verb2, dependency2)+PLUS_ONE_SMOOTHING/n
+        prob_a = self.unigram(verb, dependency)+PLUS_ONE_SMOOTHING/n
+        prob_b = self.unigram(verb2, dependency2)+PLUS_ONE_SMOOTHING/n
         return math.log(prob_a_and_b/(prob_a*prob_b))
         #math.log(prob_a_and_b) - (math.log(prob_a) + math.log(prob_b))
 
@@ -197,5 +207,9 @@ class ProbabilityTable:
                 if (verb, dependency) in self.counter[story][entity]:
                     for c in self.counter[story][entity]:
                         if c != (verb, dependency):
-                            ctr += c
+                            ctr[c] += 1
         return ctr
+
+
+    def histo_pmi(self, verb, dependency):
+        return sorted([(v, d, self.pmi(verb, dependency, v, d)) for v, d in self.histo(verb, dependency)], key=lambda x: x[-1])
