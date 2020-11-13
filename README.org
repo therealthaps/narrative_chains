@@ -48,3 +48,12 @@ CLOSED: [2020-11-04 Wed 14:55]
   $P(E1, E2)=\frac{C(E1,E2)}{DENOMINATOR}$
   + The denominator is supposed to be the number of all event pairs that share an entity.
   + This is a little more complicated than just the number of stories
+
+
+* Load data and probability table
+
+#+BEGIN_src python
+# this example is in example.py
+data, probability = process_corpus("train.csv, sample=100)
+print(probability.pmi("move", "dobj", "move", "dobj"))
+#+END_src
