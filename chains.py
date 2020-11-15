@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# c!/usr/bin/env python3
 
 import pandas as pd
 import neuralcoref
@@ -14,11 +14,13 @@ nlp = spacy.load("en_core_web_lg")
 neuralcoref.add_to_pipe(nlp)
 
 
+
 # This is a magic number
 # When we are computing probabilitieis, we don't want anything to have occurred 0 times because some of our functions are undefined around 9
 # To avoid 0's, we can use something called Plus One Smoothing, which simply assumes that there is at least a minimum amount of everything
 # Obviously, this is not the most accurate thing, since there are almost certainly sentences that never have or will be said
 # But it is very useful for estimating probabilities
+
 PLUS_ONE_SMOOTHING = 0.01
 
 ParsedStory = namedtuple("ParsedStory", "id title story one two three four five".split())
@@ -213,3 +215,5 @@ class ProbabilityTable:
 
     def histo_pmi(self, verb, dependency):
         return sorted([(v, d, self.pmi(verb, dependency, v, d)) for v, d in self.histo(verb, dependency)], key=lambda x: x[-1])
+
+
