@@ -1,4 +1,5 @@
 import chains
+from pprint import pprint
 
 
 def parse_test_instance(story):
@@ -13,18 +14,18 @@ def parse_test_instance(story):
 def story_answer(story):
     """Tells you the correct answer. Return (storyid, index). 1 for the first ending, 2 for the second ending"""
     #obviously you can't use this information until you've chosen your answer!
-    return story.InputStoryId, story.AnswerRightEnding
+    return story.InputStoryid, story.AnswerRightEnding
 
 # Load training data
-#data, table = chains.process_corpus("train.csv", 100)
-#print(table.pmi("move", "nsubj", "move", "nsubj"))
+data, table = chains.process_corpus("train.csv", 100)
+print(table.pmi("move", "nsubj", "move", "nsubj"))
 
 # load testing data
 test = chains.load_data("val.csv")
 for t in test:
     one, two = parse_test_instance(t)
     one_deps = chains.extract_dependency_pairs(one)
-    print(one[2:])
-    print(two[2:])
+    pprint(one[2:])
+    pprint(two[2:])
     # logic to choose between one and two
-    print("answer:", story_answer(t))
+    pprint("answer:"+ str(story_answer(t)))
