@@ -1,29 +1,31 @@
 import chains
+from pprint import pprint
 
+
+def parse_test_instance(story):
+    """Returns TWO ParsedStory instances representing option 1 and 2"""
+    # this is very compressed
+    id = story.InputStoryid
+    story = list(story)
+    sentences = [chains.nlp(sentence) for sentence in story[2:6]]
+    alternatives = [story[6], story[7]]
+    return [chains.ParsedStory(id, id, chains.nlp(" ".join(story[2:6]+[a])), *(sentences+[chains.nlp(a)])) for a in alternatives]
+
+def story_answer(story):
+    """Tells you the correct answer. Return (storyid, index). 1 for the first ending, 2 for the second ending"""
+    #obviously you can't use this information until you've chosen your answer!
+    return story.InputStoryid, story.AnswerRightEnding
+
+# Load training data
 data, table = chains.process_corpus("train.csv", 100)
+print(table.pmi("move", "nsubj", "move", "nsubj"))
 
-for dat in data:
-    print(dat)
-    print()
-    print()
-print(table.unigram("move", "nsubj"))
-
-# 1 Testing
-# 2 load the testing data.
-#       using panda 
-# 3 read first four sentences of 5 sentence narrative chain and extract their (verb, dependency) using spacy
-#       can be done same chains.py 
-# 4 read Two different options for the last sentence and extract their dependencies too using spacy
-#       final sentencces and their dependencies using same process as in chains.py
-# 5 find all the stories in testing set which has the same verb, dependency set
-#       we can search the data we get from chains.process_corpus and find the similar verb dependency of the story.
-# 6 calculate the pmi of each of verb dependency and with the verb dependecies of two possible final sentences.
-#       calculate pmi using table.pmi(a,b,c,d)
-# 7 each of the pmi of verb dependency calculated in the above step should be higer than the pmi of the verbs alone
-#       
-# 8 Finally, between those two possible verb,dependency set, the one with the higher pmi value should be the correct ending of the story according to model.
-#       compare the value and select final sentences.
-
-# 9 Check if the guess made by our model is correct.
-# 10 all the stories that were found in step 5 should be considered.
-# 11 We see which story/stories have the similar/same verb, dependency set and we check if the verb dependency set we selected for the last sentences matches the one in that story. 
+# load testing data
+test = chains.load_data("val.csv")
+for t in test:
+    one, two = parse_test_instance(t)
+    one_deps = chains.extract_dependency_pairs(one)
+    pprint(one[2:])
+    pprint(two[2:])
+    # logic to choose between one and two
+    pprint("answer:"+ str(story_answer(t)))
